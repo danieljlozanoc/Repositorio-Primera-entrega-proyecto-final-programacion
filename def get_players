@@ -8,7 +8,7 @@ def get_players():
 
     players_info = []
     for player in board_state["players"]:
-        players_info.appened({
+        players_info.append({
             "name": player["name"],
             "color": player["color"],
             "pieces": player["pieces"]
