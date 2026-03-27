@@ -1,0 +1,30 @@
+def next_turn():
+    """
+    Advance turn to next eligible player.
+    """
+    global board_state
+
+    if len(board_state["players"]) != 2:
+        return {
+            "message_type": "unicast",
+            "error": "No hay suficientes jugadores para cambiar turno."
+        }
+
+    if board_state["game_state"] != GAME_STATES[2]:
+        return {
+            "message_type": "unicast",
+            "error": "El juego no está en progreso."
+        }
+
+    player1_id = board_state["players"][0]["id"]
+    player2_id = board_state["players"][1]["id"]
+
+    if board_state["current_player"] == player1_id:
+        board_state["current_player"] = player2_id
+    else:
+        board_state["current_player"] = player1_id
+
+    return {
+        "message_type": "broadcast",
+        "current_player": board_state["current_player"]
+    }
