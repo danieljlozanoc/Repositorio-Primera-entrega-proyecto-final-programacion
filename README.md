@@ -37,4 +37,4 @@ Antes de mover:
 - Solo se entra con número exacto.
 - Si al jugador solo le queda 1 ficha y la distancia restante a meta es menor o igual a 6, solo puede lanzar 1 dado.
 10. Ganador
-- Gana quien logre meter sus 4 fichas en meta 🏁
+- Gana quien logre meter sus 4 fichas en meta.
