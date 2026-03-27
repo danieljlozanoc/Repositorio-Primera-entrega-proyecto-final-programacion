@@ -1,0 +1,23 @@
+def get_players():
+    """
+    Return current players and their states.
+    """
+    pass
+
+    global board_state
+
+    players_info = []
+    for player in board_state["players"]:
+        players_info.appened({
+            "name": player["name"],
+            "color": player["color"],
+            "pieces": player["pieces"]
+        })
+    
+    return { 
+        "message_type":"broadcast",
+        "players" : players_info,
+        "current_player": board_state["current_player"],
+        "game_state": board_state["game_state"]
+
+    }
