@@ -1,4 +1,4 @@
-def roll_dice(player_id, player_id):
+def roll_dice(player_id, piece_id):
 
     global board_state
     global first_turn
