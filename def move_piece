@@ -1,1 +1,63 @@
+def move_piece(player_id, piece_id):
+    """
+    Perform movement.
+    """
+    global board_state
 
+    # Validar turno
+    if board_state["current_player"] != player_id:
+        return {
+            "message_type": "unicast",
+            "error": "No es tu turno."
+        }
+
+    # Validar dado lanzado
+    dice = board_state["last_dice"]
+    if dice is None:
+        return {
+            "message_type": "unicast",
+            "error": "Debes lanzar el dado primero."
+        }
+
+    # Buscar jugador
+    player = None
+    for p in board_state["players"]:
+        if p["id"] == player_id:
+            player = p
+            break
+
+    if player is None:
+        return {
+            "message_type": "unicast",
+            "error": "Jugador no encontrado."
+        }
+
+    # Buscar ficha
+    piece = None
+    for pc in player["pieces"]:
+        if pc["piece_id"] == piece_id:
+            piece = pc
+            break
+
+    if piece is None:
+        return {
+            "message_type": "unicast",
+            "error": "Ficha no encontrada."
+        }
+
+    # Movimiento simple
+    piece["position"] += dice
+
+    # Reiniciar dado
+    board_state["last_dice"] = None
+
+    # Cambiar turno
+    next_turn()
+
+    return {
+        "message_type": "broadcast",
+        "player_id": player_id,
+        "piece_id": piece_id,
+        "new_position": piece["position"],
+        "current_player": board_state["current_player"]
+    }
