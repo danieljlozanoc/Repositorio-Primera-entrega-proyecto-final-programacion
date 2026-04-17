@@ -1,0 +1,26 @@
+def can_piece_move(player_id, piece_id, dice_value):
+    
+    global board_state
+
+    if board_state["current_player"] != player_id:
+        return {
+            "message_type": "unicast",
+            "error": "No es tu turno."
+        }
+    piece = player_id["pieces"][piece_id]
+    position = piece["position"]
+
+    if position == -1 and dice_value != 5:
+       return{
+           "message_type": "unicast",
+           "can_move": False
+       }
+    if position == -1 and dice_value == 5:
+        return{
+            "message_type": "unicast",
+            "can_move": True
+        }
+    if position != -1 and position + dice_value <= Board_limit:
+        return{
+            "message_type": "unicast",
+            "can_move": True
