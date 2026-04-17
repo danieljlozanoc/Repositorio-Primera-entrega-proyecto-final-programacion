@@ -1,0 +1,10 @@
+def get_last_dice():
+    """
+    Return last rolled dice value.
+    """
+    global board_state
+
+    return {
+        "message_type": "unicast",
+        "dice": board_state["dices_value"]
+    }
