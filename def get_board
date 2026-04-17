@@ -1,0 +1,20 @@
+def get_board():
+    """
+    Return full board representation.
+    """
+    global board_state
+
+    board_view = []
+
+    for player in board_state["players"]:
+        board_view.append({
+            "player": player["name"],
+            "color": player["color"],
+            "pieces": player["pieces"]
+        })
+
+    return {
+        "message_type": "unicast",
+        "board": board_view,
+        "current_player": board_state["current_player"]
+    }
