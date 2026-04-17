@@ -1,0 +1,10 @@
+def is_safe_square(position):
+
+    global SAFE_SQUARES
+    """
+    Return True if square is safe.
+    """
+    if position < 0:
+        return False
+
+    return position in SAFE_SQUARES
