@@ -68,19 +68,25 @@ def roll_dice(player_id, piece_id):
     # =============================
     # FASE 2: JUEGO NORMAL
     # =============================
-    if board_state["game_state"] == GAME_STATES[2]:
+    if board_state["current_player"] != player_id:
+        return {
+            "message_type": "unicast",
+            "error": "No es tu turno."
+        }
 
-        if not is_player_turn(player_id):
-            return {
-                "message_type": "unicast",
-                "error": "No es tu turno."
-            }
+    if board_state["game_state"] != GAME_STATES[2]:
+        return {
+            "message_type": "unicast",
+            "error": "El juego no ha iniciado."
+        }
 
-        dice0, dice1 = random_dices()
-        board_state["dices_value"] = (dice0, dice1)
+    dice0, dice1 = random_dices()
 
-        # Detectar presada (dobles)
-        is_double = dice0 == dice1
+    board_state["dices_value"] = (dice0, dice1)
+    board_state["dice_used"] = [False, False]
+
+    is_double = dice0 == dice1
+
 
         return {
             "message_type": "broadcast",
