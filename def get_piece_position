@@ -1,0 +1,27 @@
+def get_piece_position(player_id, piece_id):
+    """
+    Return current position of selected piece.
+    """
+    global board_state
+
+    for player in board_state["players"]:
+        if player["id"] == player_id:
+
+            # Validar que la ficha exista
+            if (piece_id < 0) or (piece_id >= len(player["pieces"])):
+                return {
+                    "message_type": "unicast",
+                    "error": "Ficha inválida"
+                }
+
+            # Devolver posición
+            return {
+                "message_type": "unicast",
+                "position": player["pieces"][piece_id]
+            }
+
+    # Si no encuentra el jugador
+    return {
+        "message_type": "unicast",
+        "error": "Jugador no encontrado"
+    }
