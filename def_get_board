@@ -1,0 +1,28 @@
+def get_board():
+    """
+    Return full board representation.
+    """
+    global board_state
+
+    board = {}
+
+    for player in board_state["players"]:
+        for i, pos in enumerate(player["pieces"]):
+
+            if pos == -1:
+                continue  # ficha en base no va al tablero
+
+            if pos not in board:
+                board[pos] = []
+
+            board[pos].append({
+                "player_id": player["id"],
+                "color": player["color"],
+                "piece_id": i
+            })
+
+    return {
+        "message_type": "unicast",
+        "board": board
+    }
+
