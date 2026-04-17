@@ -1,0 +1,18 @@
+def get_player_pieces(player_id):
+    """
+    Return all pieces of player and their positions.
+    """
+    global board_state
+
+    for player in board_state["players"]:
+        if player["id"] == player_id:
+            return {
+                "message_type": "unicast",
+                "pieces": player["pieces"]
+            }
+
+
+    return {
+        "message_type": "unicast",
+        "error": "Jugador no encontrado"
+    }
