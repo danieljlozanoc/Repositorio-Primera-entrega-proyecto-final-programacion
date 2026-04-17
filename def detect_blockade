@@ -1,0 +1,21 @@
+def detect_blockade(position):
+    global board_state
+
+    board_info = get_board()["board"]
+
+    if position not in board_info:
+        return False
+
+    pieces = board_info[position]
+
+    if len(pieces) < 2:
+        return False
+
+    # verificar si todas son del mismo jugador
+    player_id = pieces[0]["player_id"]
+
+    for piece in pieces:
+        if piece["player_id"] != player_id:
+            return False
+
+    return True
