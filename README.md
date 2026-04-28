@@ -27,7 +27,7 @@ Antes de mover:
 - Verificar que el movimiento no exceda la meta.
 6. Cambio de turno
 - Si no hay jugada extra, pasa al siguiente jugador.
-- Si el jugador saca presada, puede repetir turno.
+- Si el jugador saca presada, come ficha o llega a la meta con una ficha, puede repetir turno.
 7. Comer ficha
 - Si una ficha cae en una casilla ocupada por una ficha rival, la ficha rival vuelve a cárcel.
 - Si un jugador sale de cárcel y en su casilla de salida hay ficha(s) rival(es), esa(s) ficha(s) vuelven a cárcel.
