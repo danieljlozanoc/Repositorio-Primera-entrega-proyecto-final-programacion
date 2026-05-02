@@ -26,7 +26,7 @@ SAFE_SQUARE = [0, 7, 12, 17, 24, 29, 34, 41, 46, 51, 58, 63]
 
 CIRCULAR_TRACK = 64   # 0–63
 
-FINAL_PATH = 80       # meta final
+FINAL_PATH = 70       # meta final
 
 # Function to generate random dice rolls
 def random_dices():
