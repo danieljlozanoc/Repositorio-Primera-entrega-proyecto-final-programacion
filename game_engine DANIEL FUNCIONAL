@@ -18,83 +18,77 @@ from random import randint
 
 
 # Pieces colors for two players
-COLORS=["red","blue"]
+COLORS = ["red", "blue"]
 # Game states: waiting for players, defining turn order, in progress, finished
-GAME_STATES=["waiting_for_players","defining_turn_order","in_progress","finished"]
+GAME_STATES = ["waiting_for_players", "defining_turn_order", "in_progress", "finished"]
 
-SAFE_SQUARE = [0, 7, 12, 17, 24,29, 34, 41, 46, 51, 58, 63]
+SAFE_SQUARE = [0, 7, 12, 17, 24, 29, 34, 41, 46, 51, 58, 63]
 
 CIRCULAR_TRACK = 64   # 0–63
 
-FINAL_PATH = 70       # meta final
+FINAL_PATH = 80       # meta final
 
 # Function to generate random dice rolls
-def random_dices(): 
-       return randint(1, 6),randint(1, 6)
+def random_dices():
+    return randint(1, 6), randint(1, 6)
 
 # Only used during turn order definition phase
-first_turn={"draw":set(),"rolls" :0,"turn":None}
+first_turn = {"draw": set(), "rolls": 0, "turn": None}
 
-# You should add more fields to board_state to represent the complete state of the board, such as the position of the pieces, the state of each player, etc. 
-# For now, only the players, the current player, the dice value, and the game state are included.
-board_state={    
-    "players":[],
+# Board state includes dice_moves from the start (V1 improvement)
+board_state = {
+    "players": [],
     "current_player": None,
-    "dices_value": (0,0),
-    "game_state": GAME_STATES[0], 
+    "dices_value": (0, 0),
+    "game_state": GAME_STATES[0],
     "last_dice": None,
-    "extra_turn": False
+    "extra_turn": False,
+    "dice_moves": None,
+    "jail_attempts": {}   # {player_id: intentos_usados}
 }
-
-
-
-
-
 
 
 # =================================================
 # PLAYER MANAGEMENT
 # =================================================
 
-# Function called when a player joins the game. It should add the player to the game state and assign them a color. 
-# If the maximum number of players is reached, it should not add more players.
-# If the game is ready to start after this player joins, it should update the game state accordingly.
-# The function returns a message with the updated board state to be broadcasted to all players.
-
-def add_player(player_name,playerID):    
-
+def add_player(player_name, playerID):
+    """
+    Add a player to the game and assign a color.
+    Starts the turn-order phase when 2 players have joined.
+    """
     global board_state
-      
-    if len(board_state["players"])==2:        
-         return {"message_type":"broadcast","board_state": board_state}
-    
-   
-    color=COLORS[len(board_state["players"])]
-    
-    board_state["players"].append({"id":playerID,"name":player_name,"color":color,"pieces":[-1,-1,-1,-1]})
 
-    if len(board_state["players"])==2:
-        board_state["game_state"]=GAME_STATES[1]
-        board_state["current_player"]=board_state["players"][0]["id"]        
-        return {"message_type":"broadcast","board_state": board_state}
-    
-    return {"message_type":"broadcast","board_state": board_state}
+    if len(board_state["players"]) == 2:
+        return {"message_type": "broadcast", "board_state": board_state}
 
+    color = COLORS[len(board_state["players"])]
 
-# This function returns the player_id of the requesting player. 
-# It can be used by the client to identify itself and know which pieces belong to it, among other things.
+    board_state["players"].append({
+        "id": playerID,
+        "name": player_name,
+        "color": color,
+        "pieces": [-1, -1, -1, -1]
+    })
+
+    if len(board_state["players"]) == 2:
+        board_state["game_state"] = GAME_STATES[1]
+        board_state["current_player"] = board_state["players"][0]["id"]
+
+    return {"message_type": "broadcast", "board_state": board_state}
+
 
 def get_my_id(player_id):
-    return {"message_type":"unicast","id": player_id}
-
-
+    """
+    Return the player_id of the requesting player.
+    """
+    return {"message_type": "unicast", "id": player_id}
 
 
 def get_players():
     """
     Return current players and their states.
     """
-
     global board_state
 
     players_info = []
@@ -104,13 +98,12 @@ def get_players():
             "color": player["color"],
             "pieces": player["pieces"]
         })
-    
-    return { 
-        "message_type":"unicast",
-        "players" : players_info,
+
+    return {
+        "message_type": "unicast",
+        "players": players_info,
         "current_player": board_state["current_player"],
         "game_state": board_state["game_state"]
-
     }
 
 
@@ -137,150 +130,165 @@ def get_current_player():
     }
 
 
-
 def next_turn():
     """
-    Advance turn to next eligible player.
+    Advance turn to the next player.
     """
     global board_state
- 
+
     if len(board_state["players"]) != 2:
         return {
             "message_type": "unicast",
             "error": "No hay suficientes jugadores para cambiar turno."
         }
- 
+
     if board_state["game_state"] != GAME_STATES[2]:
         return {
             "message_type": "unicast",
             "error": "El juego no está en progreso."
         }
- 
+
     player1_id = board_state["players"][0]["id"]
     player2_id = board_state["players"][1]["id"]
- 
+
     if board_state["current_player"] == player1_id:
         board_state["current_player"] = player2_id
     else:
         board_state["current_player"] = player1_id
- 
-    # FIX: Limpiar dados al cambiar turno
+
     board_state["dice_moves"] = None
- 
+
     return {
         "message_type": "broadcast",
         "current_player": board_state["current_player"]
     }
 
 
-# Helper function to check if it's the requesting player's turn
 def is_player_turn(player_id):
-
+    """
+    Helper: check if it's the requesting player's turn.
+    """
     return board_state["current_player"] == player_id
-   
-
-
 
 
 # =================================================
 # DICE LOGIC
 # =================================================
-# The roll_dice function should handle both the turn order definition phase and the regular game phase.
-def roll_dice(player_id,force_values=None):
- 
+
+def set_dice(d1, d2):
+    """
+    Force specific dice values for testing purposes.
+    Returns the forced tuple (d1, d2).
+    """
+    return int(d1), int(d2)
+
+
+def roll_dice(player_id, force_values=None):
+    """
+    Roll dice for a player.
+    Handles both the turn-order definition phase and the regular game phase.
+    Use force_values=(d1, d2) or call set_dice(d1, d2) to force values for testing.
+    """
     global board_state
     global first_turn
- 
-    # Validar que el jugador exista
+
+    # Validate player exists
     player_ids = [p["id"] for p in board_state["players"]]
     if player_id not in player_ids:
         return {
             "message_type": "unicast",
             "error": "Jugador no válido."
         }
- 
+
     # =============================
-    # FASE 1: DEFINIR PRIMER TURNO
+    # PHASE 1: DEFINE TURN ORDER
     # =============================
     if board_state["game_state"] == GAME_STATES[1]:
- 
+
         if not is_player_turn(player_id):
             return {
                 "message_type": "unicast",
                 "error": "No es tu turno para lanzar."
             }
- 
+
         dice0, dice1 = random_dices() if force_values is None else force_values
         first_turn["rolls"] += 1
- 
-        # Comparar con el valor anterior
-        if dice0 > board_state["dices_value"][0]:
-            first_turn["draw"].clear()
+
+        # El primer jugador simplemente guarda su valor; el segundo compara contra él
+        if first_turn["rolls"] == 1:
             first_turn["draw"].add(player_id)
             first_turn["turn"] = player_id
- 
-        elif dice0 == board_state["dices_value"][0]:
-            first_turn["draw"].add(player_id)
- 
-        # Guardar dados actuales
+        else:
+            valor_anterior = board_state["dices_value"][0]
+            if dice0 > valor_anterior:
+                first_turn["draw"] = {player_id}
+                first_turn["turn"] = player_id
+            elif dice0 == valor_anterior:
+                first_turn["draw"].add(player_id)
+            # Si dice0 < valor_anterior, el primero sigue ganando, no cambia nada
+
         board_state["dices_value"] = (dice0, dice1)
- 
-        # Cambiar turno temporal para que lance el otro jugador
+
+        # Swap to let the other player roll
         if board_state["players"][0]["id"] == player_id:
             board_state["current_player"] = board_state["players"][1]["id"]
         else:
             board_state["current_player"] = board_state["players"][0]["id"]
- 
-        # Si ambos ya lanzaron
+
+        # Both players have rolled
         if first_turn["rolls"] == 2:
- 
-            # Si no hay empate
             if len(first_turn["draw"]) == 1:
                 board_state["current_player"] = first_turn["turn"]
                 board_state["game_state"] = GAME_STATES[2]
- 
-            # Si hay empate → reiniciar proceso
             else:
+                # Tie → restart
                 first_turn["rolls"] = 0
                 first_turn["turn"] = None
                 first_turn["draw"] = set()
                 board_state["current_player"] = board_state["players"][0]["id"]
- 
+
         return {
             "message_type": "broadcast",
             "dice": board_state["dices_value"],
             "current_player": board_state["current_player"],
             "game_state": board_state["game_state"]
         }
- 
+
     # =============================
-    # FASE 2: JUEGO NORMAL
+    # PHASE 2: NORMAL GAME
     # =============================
     if board_state["game_state"] == GAME_STATES[2]:
- 
+
         if not is_player_turn(player_id):
             return {
                 "message_type": "unicast",
                 "error": "No es tu turno."
             }
- 
+
+        # Validar que no haya movimientos pendientes antes de lanzar de nuevo
+        moves = board_state.get("dice_moves")
+        if moves is not None:
+            dados_pendientes = (not moves["used_d1"] or not moves["used_d2"]) and not moves["used_sum"]
+            if dados_pendientes:
+                return {
+                    "message_type": "unicast",
+                    "error": "Debes mover tus fichas pendientes antes de volver a lanzar."
+                }
+
         dice0, dice1 = random_dices() if force_values is None else force_values
- 
-        # FIX: Se busca el jugador aquí y se guarda en variable local
-        # para usarla de forma segura en el resto del bloque.
+
         player = None
         for p in board_state["players"]:
             if p["id"] == player_id:
                 player = p
- 
+
         if player is None:
             return {
                 "message_type": "unicast",
                 "error": "Jugador no encontrado."
             }
- 
+
         board_state["dices_value"] = (dice0, dice1)
- 
         board_state["dice_moves"] = {
             "d1": dice0,
             "d2": dice1,
@@ -288,49 +296,77 @@ def roll_dice(player_id,force_values=None):
             "used_d1": False,
             "used_d2": False,
             "used_sum": False
-            }
-        
+        }
         board_state["last_dice"] = dice0 + dice1
- 
-        # Detectar presada (dobles)  
-        is_double = dice0 == dice1
- 
+
+        is_double = (dice0 == dice1)
+
+        # Verificar si TODAS las fichas están en cárcel
+        all_in_jail = all(
+            piece == -1
+            for p in board_state["players"] if p["id"] == player_id
+            for piece in p["pieces"]
+        )
+
         if not can_exit_jail(player_id, is_double):
-            next_turn()
-            return {
-                "message_type": "broadcast",
-                "dice": (dice0, dice1),
-                "is_double": is_double,
-                "current_player": board_state["current_player"]
-            }
- 
-        if is_double is True:
-            # Buscamos al jugador actual en la lista de jugadores
+            # Todas en cárcel y no sacó par → contar intento
+            intentos = board_state["jail_attempts"].get(player_id, 0) + 1
+            board_state["jail_attempts"][player_id] = intentos
+            board_state["dice_moves"] = None
+
+            if intentos >= 3:
+                # Agotó los 3 intentos → pierde turno y resetea contador
+                board_state["jail_attempts"][player_id] = 0
+                next_turn()
+                return {
+                    "message_type": "broadcast",
+                    "dice": (dice0, dice1),
+                    "is_double": is_double,
+                    "current_player": board_state["current_player"],
+                    "warning": "Agotaste tus 3 intentos para salir de la cárcel. Turno perdido."
+                }
+            else:
+                # Aún tiene intentos → NO pierde turno, puede volver a lanzar
+                return {
+                    "message_type": "unicast",
+                    "dice": (dice0, dice1),
+                    "is_double": is_double,
+                    "current_player": board_state["current_player"],
+                    "warning": f"No sacaste par. Intento {intentos}/3. Vuelve a lanzar."
+                }
+
+        if is_double:
+            fichas_liberadas = False
             for p in board_state["players"]:
                 if p["id"] == player_id:
-                    # Recorremos sus 4 fichas
                     for i in range(len(p["pieces"])):
-                        # Si la ficha está en la cárcel (-1), sale a la salida (0)
                         if p["pieces"][i] == -1:
                             p["pieces"][i] = 0
-            
+                            fichas_liberadas = True
             board_state["extra_turn"] = True
- 
+            # Resetear intentos de cárcel al salir exitosamente
+            board_state["jail_attempts"][player_id] = 0
+
+            if fichas_liberadas:
+                # Si salió de la cárcel, solo puede usar UN dado para mover
+                # Marcamos d2 como usado para dejar solo d1 disponible
+                board_state["dice_moves"]["used_d2"] = True
+                board_state["dice_moves"]["used_sum"] = True
+            else:
+                # No había fichas en cárcel, puede usar ambos dados normalmente
+                pass
         else:
             board_state["extra_turn"] = False
- 
-        # FIX: Se usa la variable `player` que fue encontrada antes del bloque,
-        # garantizando que siempre existe y está dentro del scope correcto.
         return {
             "message_type": "broadcast",
             "dice": (dice0, dice1),
             "is_double": is_double,
-            "pieces": player["pieces"], 
+            "pieces": player["pieces"],
             "current_player": board_state["current_player"]
         }
- 
+
     return {"message_type": "unicast", "error": "El juego no está en curso."}
-   
+
 
 def get_last_dice():
     """
@@ -361,36 +397,26 @@ def get_player_pieces(player_id):
                 "pieces": player["pieces"]
             }
 
-
     return {
         "message_type": "unicast",
         "error": "Jugador no encontrado"
     }
 
 
-
 def can_piece_move(player_id, piece_id, dice_value):
     """
     Validate if selected piece can move.
-
-    Must check:
-    - Piece in jail
-    - Dice allows exit
-    - Movement does not exceed home
-    - Blockades
+    Checks: jail, movement limit, blockades.
     """
     global board_state
 
     for player in board_state["players"]:
         if player["id"] == player_id:
-
             pos_actual = player["pieces"][piece_id]
 
-            # Ficha en cárcel → no se mueve
             if pos_actual == -1:
                 return False
 
-            # No puede pasarse de la meta
             if pos_actual + dice_value > FINAL_PATH:
                 return False
 
@@ -400,26 +426,29 @@ def can_piece_move(player_id, piece_id, dice_value):
 
 
 def move_piece(player_id, piece_id, cells_to_move):
+    """
+    Move a piece by the given number of cells.
+    Validates turn, dice usage, movement legality, captures, and win condition.
+    """
     global board_state
 
-    # 1. Validar turno
+    # 1. Validate turn
     if not is_player_turn(player_id):
         return {"message_type": "unicast", "error": "No es tu turno."}
 
-    # 2. Validar que lanzó dados
+    # 2. Validate dice were rolled
     moves = board_state.get("dice_moves")
     if moves is None:
         return {"message_type": "unicast", "error": "Debes lanzar los dados primero."}
 
-    # 3. Convertir datos
     idx = int(piece_id)
     cells_to_move = int(cells_to_move)
 
-    # 4. Validar índice
+    # 3. Validate piece index
     if idx < 0 or idx >= 4:
         return {"message_type": "unicast", "error": "Ficha inválida."}
 
-    # 5. Buscar jugador
+    # 4. Find player
     p_actual = None
     for p in board_state["players"]:
         if p["id"] == player_id:
@@ -428,17 +457,13 @@ def move_piece(player_id, piece_id, cells_to_move):
     if p_actual is None:
         return {"message_type": "unicast", "error": "Jugador no encontrado."}
 
-    # =================================================
-    # 6. VALIDAR SI EL MOVIMIENTO ESTÁ PERMITIDO POR LOS DADOS
-    # =================================================
+    # 5. Validate move against available dice values
     move_type = None
 
     if cells_to_move == moves["d1"] and not moves["used_d1"]:
         move_type = "d1"
-
     elif cells_to_move == moves["d2"] and not moves["used_d2"]:
         move_type = "d2"
-
     elif cells_to_move == moves["sum"] and not moves["used_sum"]:
         move_type = "sum"
 
@@ -448,88 +473,61 @@ def move_piece(player_id, piece_id, cells_to_move):
             "error": f"Movimiento no válido. Opciones: {moves['d1']}, {moves['d2']} o {moves['sum']}"
         }
 
-    # =================================================
-    # 7. VALIDAR SI LA FICHA PUEDE MOVERSE
-    # =================================================
+    # 6. Validate if piece can actually move
     if not can_piece_move(player_id, idx, cells_to_move):
-
-        if board_state.get("extra_turn"):
+        pos_actual = p_actual["pieces"][idx]
+        if pos_actual == -1:
             return {
-                "message_type": "broadcast",
-                "message": "No puedes mover esta ficha, pero tienes otro intento por par.",
-                "current_player": board_state["current_player"]
+                "message_type": "unicast",
+                "error": "Esa ficha está en la cárcel. Necesitas un par para sacarla. Intenta mover otra ficha."
             }
+        return {
+            "message_type": "unicast",
+            "error": "Esta ficha no puede moverse con ese valor (se pasaría de la meta). Intenta con otra ficha."
+        }
 
-        board_state["extra_turn"] = False
-        return next_turn()
-
-    # =================================================
-    # 8. AHORA SÍ: CONSUMIR EL DADO
-    # =================================================
+    # 7. Consume dice (V1 fix: using d1/d2 individually does NOT consume the sum)
     if move_type == "d1":
         moves["used_d1"] = True
-        moves["used_sum"] = True  # Al usar un dado individual, la suma ya no está disponible
-
     elif move_type == "d2":
         moves["used_d2"] = True
-        moves["used_sum"] = True  # Al usar un dado individual, la suma ya no está disponible
-
     elif move_type == "sum":
         moves["used_sum"] = True
         moves["used_d1"] = True
         moves["used_d2"] = True
 
-    # =================================================
-    # 9. MOVER FICHA
-    # =================================================
+    # 8. Move the piece
     p_actual["pieces"][idx] += cells_to_move
     nueva_pos = p_actual["pieces"][idx]
 
-    # =================================================
-    # 10. POSICIÓN REAL
-    # =================================================
-    mi_pos_real = nueva_pos
+    # 9. Calculate real board position
+    mi_pos_real = get_real_position(player_id, nueva_pos)
 
-    if player_id == board_state["players"][1]["id"]:
-        mi_pos_real = (nueva_pos + 34) % CIRCULAR_TRACK
-
-    # =================================================
-    # 11. CAPTURA
-    # =================================================
-    if nueva_pos < CIRCULAR_TRACK and not is_safe_square(mi_pos_real):
-
+    # 10. Check capture (only on circular track, non-safe squares)
+    if nueva_pos < CIRCULAR_TRACK and mi_pos_real is not None and not is_safe_square(mi_pos_real):
         rival_id, rival_piece_idx = check_capture(player_id, mi_pos_real)
-
         if rival_id is not None:
             send_piece_home(rival_id, rival_piece_idx)
 
-    # =================================================
-    # 12. VICTORIA
-    # =================================================
+    # 11. Check win condition
     if has_player_won(player_id):
         board_state["game_state"] = GAME_STATES[3]
-
         return {
             "message_type": "broadcast",
             "winner": player_id,
             "board_state": board_state
         }
 
-    # =================================================
-    # 13. CONTROL DE FIN DE TURNO
-    # =================================================
-    turn_finished = ((moves["used_d1"] and moves["used_d2"]) or moves["used_sum"])
+    # 12. Turn control (V1 fix: extra_turn resets dice but keeps the same player)
+    turn_finished = moves["used_sum"] or (moves["used_d1"] and moves["used_d2"])
 
-    if board_state.get("extra_turn"):
-        if turn_finished:
+    if turn_finished:
+        if board_state.get("extra_turn"):
+            board_state["dice_moves"] = None
             board_state["extra_turn"] = False
+        else:
+            next_turn()
 
-    elif turn_finished:
-        next_turn()
-
-    # =================================================
-    # 14. RESPUESTA
-    # =================================================
     return {
         "message_type": "broadcast",
         "players": board_state["players"],
@@ -549,7 +547,6 @@ def get_board():
     global board_state
 
     board_view = []
-
     for player in board_state["players"]:
         board_view.append({
             "player": player["name"],
@@ -564,16 +561,11 @@ def get_board():
     }
 
 
-
-
-
 def is_safe_square(position):
     """
-    Return True if square is safe.
+    Return True if the square is a safe zone.
     """
-    if position in SAFE_SQUARE:
-        return True
-    return False
+    return position in SAFE_SQUARE
 
 
 def detect_blockade(position):
@@ -583,31 +575,41 @@ def detect_blockade(position):
     pass
 
 
+def get_real_position(player_id, pos_rel):
+    """
+    Convert a player's relative position to absolute board position.
+    Returns None if piece is in jail or at goal.
+    """
+    if pos_rel < 0 or pos_rel >= CIRCULAR_TRACK:
+        return None
+
+    if player_id == board_state["players"][0]["id"]:
+        return pos_rel
+    elif player_id == board_state["players"][1]["id"]:
+        return (pos_rel + 34) % CIRCULAR_TRACK
+
+    return None
+
+
 # =================================================
 # CAPTURE & RULES
 # =================================================
 
 def check_capture(player_id, position):
     """
-    Determine if a capture occurs.
+    Determine if a capture occurs at the given absolute position.
     """
     for opponent in board_state["players"]:
         if opponent["id"] != player_id:
-
             for i in range(len(opponent["pieces"])):
-
                 pos_rel = opponent["pieces"][i]
 
-                # Ignorar piezas fuera del tablero
                 if pos_rel < 0 or pos_rel >= CIRCULAR_TRACK:
                     continue
 
-                pos_real = pos_rel
+                pos_real = get_real_position(opponent["id"], pos_rel)
 
-                if opponent["id"] == board_state["players"][1]["id"]:
-                    pos_real = (pos_rel + 34) % CIRCULAR_TRACK
-
-                if position == pos_real:
+                if pos_real == position:
                     return opponent["id"], i
 
     return None, None
@@ -615,7 +617,7 @@ def check_capture(player_id, position):
 
 def send_piece_home(player_id, piece_id):
     """
-    Return a captured piece to jail/start.
+    Return a captured piece to jail.
     """
     global board_state
 
@@ -629,24 +631,15 @@ def send_piece_home(player_id, piece_id):
 
 def can_exit_jail(player_id, is_double):
     """
-    Validate if player can leave jail.
+    Validate if player can leave jail (all pieces in jail requires a double).
     """
     global board_state
 
     for player in board_state["players"]:
         if player["id"] == player_id:
-
-            # Verificar si todas las fichas están en cárcel
-            all_in_jail = True
-            for piece in player["pieces"]:
-                if piece != -1:
-                    all_in_jail = False
-
-            # Si todas están en cárcel
+            all_in_jail = all(piece == -1 for piece in player["pieces"])
             if all_in_jail:
                 return is_double
-
-            # Si no todas están en cárcel, puede jugar normal
             return True
 
     return False
@@ -658,25 +651,23 @@ def can_exit_jail(player_id, is_double):
 
 def has_player_won(player_id):
     """
-    Return True if all pieces reached home.
+    Return True if all pieces reached home (position 70).
     """
     for player in board_state["players"]:
         if player["id"] == player_id:
-            # Comparamos si la lista de piezas es exactamente [70, 70, 70, 70]
-            if player["pieces"] == [70, 70, 70, 70]:
-                return True
+            return player["pieces"] == [FINAL_PATH, FINAL_PATH, FINAL_PATH, FINAL_PATH]
     return False
 
 
 def check_game_finished():
     """
-    Determine if game is over.
+    Check if any player has won and update game state accordingly.
     """
     global board_state
 
     for player in board_state["players"]:
-        if player["pieces"] == [FINAL_PATH, FINAL_PATH, FINAL_PATH, FINAL_PATH]:
-            board_state["game_state"] = GAME_STATES[3]  # "finished"
+        if has_player_won(player["id"]):
+            board_state["game_state"] = GAME_STATES[3]
             return {
                 "message_type": "broadcast",
                 "winner": player["id"],
@@ -695,7 +686,7 @@ def check_game_finished():
 
 def get_game_status():
     """
-    Return current game status.
+    Return current game status and active player.
     """
     global board_state
 
@@ -708,20 +699,11 @@ def get_game_status():
 
 def get_state():
     """
-    Return COMPLETE game state.
-
-    You define structure.
+    Return complete game state.
     """
-    pass
+    global board_state
 
-def get_real_position(player_id, pos_rel):
-    if pos_rel < 0 or pos_rel >= CIRCULAR_TRACK:
-        return None  # cárcel o meta
-
-    # jugador 1 (rojo)
-    if player_id == board_state["players"][0]["id"]:
-        return pos_rel
-
-    # jugador 2 (azul)
-    elif player_id == board_state["players"][1]["id"]:
-        return (pos_rel + 34) % CIRCULAR_TRACK
+    return {
+        "message_type": "unicast",
+        "board_state": board_state
+    }
