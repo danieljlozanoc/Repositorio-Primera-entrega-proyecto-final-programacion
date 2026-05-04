@@ -344,19 +344,37 @@ def roll_dice(player_id, force_values=None):
                             p["pieces"][i] = 0
                             fichas_liberadas = True
             board_state["extra_turn"] = True
-            # Resetear intentos de cárcel al salir exitosamente
             board_state["jail_attempts"][player_id] = 0
 
             if fichas_liberadas:
-                # Si salió de la cárcel, solo puede usar UN dado para mover
-                # Marcamos d2 como usado para dejar solo d1 disponible
-                board_state["dice_moves"]["used_d2"] = True
-                board_state["dice_moves"]["used_sum"] = True
-            else:
-                # No había fichas en cárcel, puede usar ambos dados normalmente
-                pass
+                # El par sacó fichas de la cárcel → DEBE volver a lanzar, no puede mover aún
+                board_state["dice_moves"] = None
         else:
             board_state["extra_turn"] = False
+
+        # Verificar si el jugador tiene algún movimiento posible con los dados actuales
+        moves_now = board_state.get("dice_moves")
+        if moves_now is not None:
+            valores_disponibles = []
+            if not moves_now["used_d1"]: valores_disponibles.append(moves_now["d1"])
+            if not moves_now["used_d2"]: valores_disponibles.append(moves_now["d2"])
+            if not moves_now["used_sum"]: valores_disponibles.append(moves_now["sum"])
+
+            hay_movimiento_posible = any(
+                can_piece_move(player_id, i, v)
+                for i in range(4)
+                for v in valores_disponibles
+            )
+
+            if not hay_movimiento_posible:
+                next_turn()
+                return {
+                    "message_type": "broadcast",
+                    "dice": (dice0, dice1),
+                    "current_player": board_state["current_player"],
+                    "warning": "No tienes movimientos posibles con estos dados. Turno perdido."
+                }
+
         return {
             "message_type": "broadcast",
             "dice": (dice0, dice1),
@@ -476,15 +494,47 @@ def move_piece(player_id, piece_id, cells_to_move):
     # 6. Validate if piece can actually move
     if not can_piece_move(player_id, idx, cells_to_move):
         pos_actual = p_actual["pieces"][idx]
+
+        # Ficha en cárcel
         if pos_actual == -1:
             return {
                 "message_type": "unicast",
                 "error": "Esa ficha está en la cárcel. Necesitas un par para sacarla. Intenta mover otra ficha."
             }
-        return {
-            "message_type": "unicast",
-            "error": "Esta ficha no puede moverse con ese valor (se pasaría de la meta). Intenta con otra ficha."
-        }
+
+        # Ficha ya en meta o movimiento que excede la meta
+        # Contar fichas disponibles (ni en cárcel ni en meta)
+        fichas_disponibles = [
+            i for i in range(4)
+            if p_actual["pieces"][i] != -1 and p_actual["pieces"][i] != FINAL_PATH
+        ]
+
+        if len(fichas_disponibles) <= 1:
+            # Solo queda esta ficha disponible y no puede moverse
+            is_double = board_state["dices_value"][0] == board_state["dices_value"][1]
+            if is_double:
+                # Par da derecho a turno extra → no cede turno, solo pierde los dados
+                board_state["dice_moves"] = None
+                board_state["extra_turn"] = False
+                return {
+                    "message_type": "broadcast",
+                    "warning": "Los dados exceden la meta, pero eran par. No cedes turno, vuelve a lanzar.",
+                    "current_player": board_state["current_player"]
+                }
+            else:
+                # No es par → ceder turno
+                next_turn()
+                return {
+                    "message_type": "broadcast",
+                    "warning": "No puedes mover tu única ficha disponible con estos dados. Turno cedido.",
+                    "current_player": board_state["current_player"]
+                }
+        else:
+            # Hay otras fichas disponibles → informar sin perder turno
+            return {
+                "message_type": "unicast",
+                "error": "Esta ficha no puede moverse con ese valor (se pasaría de la meta). Intenta con otra ficha."
+            }
 
     # 7. Consume dice (V1 fix: using d1/d2 individually does NOT consume the sum)
     if move_type == "d1":
@@ -512,9 +562,13 @@ def move_piece(player_id, piece_id, cells_to_move):
     # 11. Check win condition
     if has_player_won(player_id):
         board_state["game_state"] = GAME_STATES[3]
+        board_state["dice_moves"] = None
+        board_state["extra_turn"] = False
         return {
             "message_type": "broadcast",
+            "game_state": GAME_STATES[3],
             "winner": player_id,
+            "message": f"¡El juego ha terminado! El ganador es el jugador con ID: {player_id}",
             "board_state": board_state
         }
 
